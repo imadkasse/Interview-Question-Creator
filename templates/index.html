@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0A0C0F">
+    <meta name="description" content="Upload a PDF and generate interview questions with answers grounded in the document.">
+    <title>Interview Question Creator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink-0: #0A0C0F;
+            --ink-1: #11151A;
+            --ink-2: #171C23;
+            --line: rgba(255, 255, 255, 0.09);
+            --line-strong: rgba(255, 255, 255, 0.16);
+            --text: #E9ECF1;
+            --text-2: #A8B2BE;
+            --text-3: #8A94A1;
+            --accent: #F4C55C;
+            --accent-strong: #FFD479;
+            --accent-ink: #20180A;
+            --danger: #FF9C8F;
+            --ok: #7BE3AE;
+            --radius: 14px;
+            --radius-sm: 10px;
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -20px rgba(0, 0, 0, 0.8);
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html { -webkit-text-size-adjust: 100%; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(60rem 28rem at 50% -12rem, rgba(244, 197, 92, 0.06), transparent 70%),
+                var(--ink-0);
+            color: var(--text);
+            font-family: "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-size: 16px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        ::selection { background: var(--accent); color: var(--accent-ink); }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+        * { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
+
+        .visually-hidden {
+            position: absolute;
+            width: 1px; height: 1px;
+            margin: -1px; padding: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .shell {
+            width: min(100% - 2 * clamp(16px, 4vw, 40px), 1080px);
+            margin-inline: auto;
+            padding-block: clamp(28px, 5vw, 64px) 32px;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(22px, 3vw, 32px);
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+
+        /* ---------- masthead ---------- */
+
+        .masthead { display: flex; flex-direction: column; gap: 10px; }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 0;
+            font-size: clamp(24px, 3.2vw, 34px);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            text-wrap: balance;
+        }
+
+        .brand svg { flex: none; width: 30px; height: 30px; color: var(--accent); }
+
+        .lede {
+            margin: 0;
+            max-width: 58ch;
+            color: var(--text-2);
+            font-size: 15.5px;
+            text-wrap: pretty;
+        }
+
+        /* ---------- panels ---------- */
+
+        .panel {
+            background: var(--ink-1);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .upload { padding: clamp(18px, 2.6vw, 28px); }
+
+        /* ---------- form ---------- */
+
+        .dropzone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: clamp(24px, 4vw, 40px) 20px;
+            border: 1.5px dashed var(--line-strong);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.015);
+            text-align: center;
+            transition: border-color 160ms ease, background-color 160ms ease;
+        }
+
+        .dropzone-body {
+            display: grid;
+            justify-items: center;
+            gap: 6px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .dropzone:hover { border-color: rgba(244, 197, 92, 0.45); }
+
+        .dropzone.is-dragging {
+            border-color: var(--accent);
+            background: rgba(244, 197, 92, 0.07);
+        }
+
+        .dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+        .dropzone svg { width: 26px; height: 26px; color: var(--text-3); }
+
+        .dropzone-title { margin: 4px 0 0; font-weight: 500; font-size: 16px; }
+
+        .dropzone-note { margin: 0; color: var(--text-3); font-size: 13.5px; }
+
+        #pdf-file {
+            position: absolute;
+            width: 1px; height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .file-chip {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            padding: 6px 12px;
+            max-width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--ink-2);
+            font-family: "JetBrains Mono", ui-monospace, monospace;
+            font-size: 12.5px;
+            color: var(--text);
+        }
+
+        .file-chip.is-visible { display: inline-flex; }
+
+        .file-chip span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-chip button {
+            flex: none;
+            display: grid;
+            place-items: center;
+            width: 22px; height: 22px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-3);
+            cursor: pointer;
+        }
+
+        .file-chip button:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+        .file-chip button svg { width: 13px; height: 13px; }
+
+        .form-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-top: 20px;
+        }
+
+        .form-hint { margin: 0; color: var(--text-3); font-size: 13.5px; max-width: 46ch; }
+
+        .form-alert {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin: 16px 0 0;
+            color: var(--danger);
+            font-size: 14px;
+        }
+
+        .form-alert[hidden] { display: none; }
+
+        .form-alert svg { flex: none; width: 16px; height: 16px; margin-top: 3px; }
+
+        /* ---------- buttons ---------- */
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            min-height: 44px;
+            padding: 0 20px;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
+            font: inherit;
+            font-weight: 600;
+            font-size: 15px;
+            letter-spacing: -0.01em;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease;
+        }
+
+        .btn:active { transform: translateY(1px); }
+
+        .btn-primary { background: var(--accent); color: var(--accent-ink); }
+        .btn-primary:hover { background: var(--accent-strong); }
+
+        .btn-primary:focus-visible { outline-color: var(--text); outline-offset: 2px; }
+
+        .btn-ghost {
+            background: transparent;
+            border-color: var(--line-strong);
+            color: var(--text);
+        }
+
+        .btn-ghost:hover { border-color: var(--text-3); background: rgba(255, 255, 255, 0.04); }
+
+        .btn[disabled] {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+        }
+
+        .btn .spinner { display: none; }
+        .btn[aria-busy="true"] .spinner { display: block; }
+        .btn[aria-busy="true"] .btn-icon { display: none; }
+
+        .btn-icon { width: 17px; height: 17px; }
+
+        .spinner {
+            width: 15px; height: 15px;
+            border: 2px solid rgba(32, 24, 10, 0.28);
+            border-top-color: var(--accent-ink);
+            border-radius: 50%;
+            animation: spin 800ms linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(1turn); } }
+
+        /* ---------- results ---------- */
+
+        .result { margin-top: clamp(16px, 2.4vw, 22px); }
+        .result[hidden] { display: none; }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+            gap: clamp(16px, 2.4vw, 22px);
+            align-items: stretch;
+            animation: enter 340ms var(--ease) both;
+        }
+
+        @keyframes enter {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .preview { display: flex; flex-direction: column; overflow: hidden; margin: 0; }
+
+        .preview-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .preview-head h2 {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-3);
+        }
+
+        .preview-head .file-name {
+            margin: 0;
+            font-family: "JetBrains Mono", ui-monospace, monospace;
+            font-size: 12px;
+            color: var(--text-2);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #view-pdf {
+            display: block;
+            width: 100%;
+            height: clamp(320px, 52vh, 620px);
+            border: 0;
+            background: var(--ink-2);
+        }
+
+        .preview-foot { padding: 10px 16px; border-top: 1px solid var(--line); margin: 0; }
+
+        .preview-foot a {
+            color: var(--text-2);
+            font-size: 13px;
+            text-underline-offset: 3px;
+        }
+
+        .preview-foot a:hover { color: var(--accent); }
+
+        /* ---------- output states ---------- */
+
+        .output {
+            display: grid;
+            place-items: center;
+            padding: clamp(24px, 4vw, 40px);
+            text-align: center;
+        }
+
+        .state { display: none; flex-direction: column; align-items: center; gap: 12px; max-width: 34ch; }
+
+        .output[data-state="working"] .state-working,
+        .output[data-state="done"] .state-done,
+        .output[data-state="error"] .state-error { display: flex; }
+
+        .state h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+        .state p { margin: 0; color: var(--text-2); font-size: 14.5px; text-wrap: pretty; }
+
+        .state-mark {
+            display: grid;
+            place-items: center;
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            border: 1px solid var(--line);
+            background: var(--ink-2);
+            margin-bottom: 2px;
+        }
+
+        .state-mark svg { width: 24px; height: 24px; }
+        .state-done .state-mark { color: var(--ok); border-color: rgba(123, 227, 174, 0.3); }
+        .state-error .state-mark { color: var(--danger); border-color: rgba(255, 156, 143, 0.3); }
+
+        .big-spinner {
+            width: 44px; height: 44px;
+            margin-bottom: 6px;
+            border: 2px solid rgba(244, 197, 92, 0.28);
+            border-top-color: var(--accent);
+            border-right-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 900ms linear infinite;
+        }
+
+        .elapsed {
+            font-family: "JetBrains Mono", ui-monospace, monospace;
+            font-variant-numeric: tabular-nums;
+            font-size: 12.5px;
+            color: var(--text-3);
+        }
+
+        .state-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
+
+        .state-actions .btn { max-width: 100%; }
+
+        /* ---------- footer ---------- */
+
+        .foot {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 8px 20px;
+            margin-top: auto;
+            padding-top: 24px;
+            border-top: 1px solid var(--line);
+            color: var(--text-3);
+            font-size: 12.5px;
+        }
+
+        .foot code {
+            font-family: "JetBrains Mono", ui-monospace, monospace;
+            font-size: 12px;
+            color: var(--text-2);
+        }
+
+        /* ---------- responsive ---------- */
+
+        @media (max-width: 860px) {
+            .result-grid { grid-template-columns: minmax(0, 1fr); }
+            .output { order: 1; min-height: 300px; }
+            .preview { order: 2; }
+            #view-pdf { height: clamp(280px, 44vh, 420px); }
+        }
+
+        @media (max-width: 520px) {
+            .form-actions { flex-direction: column; align-items: stretch; }
+            .form-actions .btn { width: 100%; }
+            .file-chip { max-width: 100%; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            .big-spinner, .btn .spinner {
+                animation: none;
+                border-color: var(--accent);
+                opacity: 0.7;
+            }
+            .result-grid { animation: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="masthead">
+            <h1 class="brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+                    <path d="M14 3v5h5"/>
+                    <path d="M9.5 13.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3"/>
+                    <path d="M12 19.6h.01"/>
+                </svg>
+                Interview Question Creator
+            </h1>
+            <p class="lede">Upload a PDF and get interview questions, then answers drawn only from what the document actually says.</p>
+        </header>
+
+        <main>
+            <section class="panel upload" aria-labelledby="upload-title">
+                <h2 id="upload-title" class="visually-hidden">Upload a document</h2>
+                <form id="upload-form" novalidate>
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="pdf-file" name="pdf_file" accept="application/pdf,.pdf" aria-describedby="form-hint">
+                        <label class="dropzone-body" for="pdf-file">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <path d="m7 9 5-5 5 5"/>
+                                <path d="M12 4v12"/>
+                            </svg>
+                            <span class="dropzone-title">Upload your PDF file here</span>
+                            <span class="dropzone-note">Drag and drop, or click to browse &middot; PDF only &middot; max no. of pages is 5</span>
+                        </label>
+                        <span class="file-chip" id="file-chip">
+                            <span id="file-name"></span>
+                            <button type="button" id="clear-file" aria-label="Remove selected file">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                                    <path d="M18 6 6 18M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </span>
+                    </div>
+
+                    <p class="form-alert" id="form-alert" role="alert" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"/>
+                            <path d="M12 7.5v5.5"/>
+                            <path d="M12 16.5h.01"/>
+                        </svg>
+                        <span id="form-alert-text"></span>
+                    </p>
+
+                    <div class="form-actions">
+                        <p class="form-hint" id="form-hint">Longer documents take longer: question generation calls the model for every chunk of text.</p>
+                        <button type="submit" class="btn btn-primary" id="upload-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M5 12h14M13 6l6 6-6 6"/>
+                            </svg>
+                            <span class="btn-label">Generate Q&amp;A</span>
+                            <span class="spinner" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="result" id="result" hidden aria-label="Generated questions and answers">
+                <div class="result-grid">
+                    <figure class="panel preview">
+                        <div class="preview-head">
+                            <h2>Document</h2>
+                            <p class="file-name" id="doc-name"></p>
+                        </div>
+                        <iframe id="view-pdf" title="Preview of the uploaded PDF" src="about:blank"></iframe>
+                        <p class="preview-foot"><a href="#" id="open-pdf" target="_blank" rel="noopener">Open the PDF in a new tab</a></p>
+                    </figure>
+
+                    <div class="panel output" id="output" data-state="working" aria-busy="true">
+                        <div class="state state-working">
+                            <div class="big-spinner" aria-hidden="true"></div>
+                            <h2 id="working-title">Reading your document</h2>
+                            <p id="working-text">Generating questions, then answering each one from the document.</p>
+                            <p class="elapsed"><span id="elapsed" aria-hidden="true">0s</span></p>
+                        </div>
+
+                        <div class="state state-done">
+                            <div class="state-mark" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="m4 12.5 5 5L20 6.5"/>
+                                </svg>
+                            </div>
+                            <h2>Q&amp;A ready</h2>
+                            <p>Questions with answers, grounded in your document. Download the CSV to keep them.</p>
+                            <div class="state-actions">
+                                <a href="#" id="download-btn" class="btn btn-primary" download>
+                                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
+                                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                                    </svg>
+                                    Download CSV
+                                </a>
+                                <button type="button" class="btn btn-ghost" id="start-over">Start over</button>
+                            </div>
+                        </div>
+
+                        <div class="state state-error">
+                            <div class="state-mark" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 8v5"/>
+                                    <path d="M12 17h.01"/>
+                                    <path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>
+                                </svg>
+                            </div>
+                            <h2>Couldn't generate Q&amp;A</h2>
+                            <p id="error-text">Something went wrong. Try again.</p>
+                            <div class="state-actions">
+                                <button type="button" class="btn btn-ghost" id="retry-btn">Try again</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <p class="visually-hidden" role="status" aria-live="polite" id="live"></p>
+        </main>
+
+        <footer class="foot">
+            <span>Answers come from the uploaded document only &mdash; the model is told not to use outside knowledge.</span>
+            <span>Model <code>openai/gpt-oss-20b</code> via Groq</span>
+        </footer>
+    </div>
+
+    <noscript>
+        <p style="max-width: 60ch; margin: 0 auto 32px; padding: 0 16px; color: #A8B2BE;">
+            This tool needs JavaScript to upload and analyze your document. Please enable it and reload the page.
+        </p>
+    </noscript>
+
+    <script>
+        (function () {
+            "use strict";
+
+            var form = document.getElementById("upload-form");
+            var input = document.getElementById("pdf-file");
+            var dropzone = document.getElementById("dropzone");
+            var fileChip = document.getElementById("file-chip");
+            var fileNameEl = document.getElementById("file-name");
+            var clearFileBtn = document.getElementById("clear-file");
+            var uploadBtn = document.getElementById("upload-btn");
+            var btnLabel = uploadBtn.querySelector(".btn-label");
+            var formAlert = document.getElementById("form-alert");
+            var formAlertText = document.getElementById("form-alert-text");
+            var result = document.getElementById("result");
+            var output = document.getElementById("output");
+            var workingTitle = document.getElementById("working-title");
+            var workingText = document.getElementById("working-text");
+            var elapsedEl = document.getElementById("elapsed");
+            var errorText = document.getElementById("error-text");
+            var docName = document.getElementById("doc-name");
+            var viewPdf = document.getElementById("view-pdf");
+            var openPdf = document.getElementById("open-pdf");
+            var downloadBtn = document.getElementById("download-btn");
+            var startOverBtn = document.getElementById("start-over");
+            var retryBtn = document.getElementById("retry-btn");
+            var live = document.getElementById("live");
+
+            var timerId = null;
+            var startedAt = 0;
+            var busy = false;
+
+            function announce(message) {
+                live.textContent = "";
+                window.setTimeout(function () { live.textContent = message; }, 60);
+            }
+
+            /* Build an absolute, URL-safe path from a backend relative path. */
+            function toUrl(path) {
+                if (!path) return "";
+                var clean = String(path).replace(/^\/+/, "");
+                return "/" + clean.split("/").map(encodeURIComponent).join("/");
+            }
+
+            function baseName(path) {
+                return String(path || "").split("/").pop();
+            }
+
+            /* /analyze double-encodes its payload (a JSON string inside JSON), so accept both shapes. */
+            function readJson(response) {
+                return response.text().then(function (text) {
+                    if (!text) return null;
+                    try {
+                        var value = JSON.parse(text);
+                        if (typeof value === "string") {
+                            try { return JSON.parse(value); } catch (e) { return value; }
+                        }
+                        return value;
+                    } catch (e) {
+                        return text;
+                    }
+                });
+            }
+
+            function setBusy(isBusy) {
+                busy = isBusy;
+                uploadBtn.disabled = isBusy;
+                uploadBtn.setAttribute("aria-busy", isBusy ? "true" : "false");
+                btnLabel.textContent = isBusy ? "Working\u2026" : "Generate Q&A";
+            }
+
+            function setState(name) {
+                output.dataset.state = name;
+                output.setAttribute("aria-busy", name === "working" ? "true" : "false");
+            }
+
+            function startTimer() {
+                startedAt = Date.now();
+                elapsedEl.textContent = "0s";
+                window.clearInterval(timerId);
+                timerId = window.setInterval(function () {
+                    var seconds = Math.floor((Date.now() - startedAt) / 1000);
+                    elapsedEl.textContent = seconds < 60
+                        ? seconds + "s"
+                        : Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
+                }, 1000);
+            }
+
+            function stopTimer() {
+                window.clearInterval(timerId);
+                timerId = null;
+            }
+
+            function showFile(file) {
+                fileNameEl.textContent = file ? file.name : "";
+                fileChip.classList.toggle("is-visible", Boolean(file));
+            }
+
+            function clearFormError() {
+                formAlert.hidden = true;
+                formAlertText.textContent = "";
+            }
+
+            function showFormError(message) {
+                formAlertText.textContent = message;
+                formAlert.hidden = false;
+                announce(message);
+                input.focus({ preventScroll: true });
+            }
+
+            function showError(message) {
+                setState("error");
+                errorText.textContent = message;
+                stopTimer();
+                setBusy(false);
+                announce("Error. " + message);
+                retryBtn.focus({ preventScroll: true });
+            }
+
+            function resetToForm() {
+                stopTimer();
+                setBusy(false);
+                clearFormError();
+                result.hidden = true;
+                viewPdf.src = "about:blank";
+                docName.textContent = "";
+                input.value = "";
+                showFile(null);
+                uploadBtn.focus({ preventScroll: true });
+            }
+
+            function validate(file) {
+                if (!file) {
+                    return "Choose a PDF first. Click the upload box to browse, or drop a file on it.";
+                }
+                var name = file.name.toLowerCase();
+                if (!name.endsWith(".pdf") && file.type !== "application/pdf") {
+                    return "That file isn't a PDF. Choose a file ending in .pdf.";
+                }
+                return null;
+            }
+
+            async function analyze(file) {
+                var invalid = validate(file);
+                if (invalid) {
+                    showFormError(invalid);
+                    return;
+                }
+                if (busy) return;
+
+                clearFormError();
+                resetOutputForNewRun();
+                result.hidden = false;
+                setState("working");
+                setBusy(true);
+                workingTitle.textContent = "Reading your document";
+                workingText.textContent = "Uploading " + file.name + " and generating questions, then answering each one.";
+                startTimer();
+                announce("Working. Reading your document and generating questions.");
+
+                try {
+                    var uploadBody = new FormData();
+                    uploadBody.append("pdf_file", file);
+                    uploadBody.append("filename", file.name);
+
+                    var uploadRes = await fetch("/upload", { method: "POST", body: uploadBody });
+                    var uploadData = await readJson(uploadRes);
+
+                    if (!uploadRes.ok) {
+                        throw new Error("Upload failed (" + uploadRes.status + "). Check the file and try again.");
+                    }
+                    if (uploadData && uploadData.msg === "error") {
+                        throw new Error("Maximum number of pages exceeded. Try a shorter PDF.");
+                    }
+                    if (!uploadData || !uploadData.pdf_filename) {
+                        throw new Error("The server didn't return the uploaded file. Try again.");
+                    }
+
+                    var pdfUrl = toUrl(uploadData.pdf_filename);
+                    viewPdf.src = pdfUrl;
+                    openPdf.href = pdfUrl;
+                    docName.textContent = file.name;
+
+                    setState("working");
+                    workingTitle.textContent = "Writing questions and answers";
+                    workingText.textContent = "The model reads every chunk of the document. This is the slow part.";
+                    announce("Upload complete. Generating questions and answers.");
+
+                    var analyzeBody = new FormData();
+                    analyzeBody.append("pdf_filename", uploadData.pdf_filename);
+
+                    var analyzeRes = await fetch("/analyze", { method: "POST", body: analyzeBody });
+                    var analyzeData = await readJson(analyzeRes);
+
+                    if (!analyzeRes.ok) {
+                        throw new Error("The server returned " + analyzeRes.status + ". The document may be too long, or the model may be unavailable.");
+                    }
+
+                    var outputFile = analyzeData && analyzeData.output_file;
+                    if (!outputFile) {
+                        throw new Error("The server didn't return a result file. Try again.");
+                    }
+
+                    var csvUrl = toUrl(outputFile);
+                    downloadBtn.href = csvUrl;
+                    downloadBtn.setAttribute("download", baseName(outputFile));
+
+                    stopTimer();
+                    setState("done");
+                    setBusy(false);
+                    announce("Q&A ready. The download button is now available.");
+                    downloadBtn.focus({ preventScroll: true });
+                } catch (error) {
+                    var message = error && error.message
+                        ? error.message
+                        : "Something went wrong. Try again.";
+                    if (error instanceof TypeError) {
+                        message = "Can't reach the server. Make sure the app is still running, then try again.";
+                    }
+                    showError(message);
+                }
+            }
+
+            function resetOutputForNewRun() {
+                downloadBtn.href = "#";
+                downloadBtn.removeAttribute("download");
+                viewPdf.src = "about:blank";
+                docName.textContent = "";
+                openPdf.href = "#";
+            }
+
+            form.addEventListener("submit", function (event) {
+                event.preventDefault();
+                analyze(input.files[0]);
+            });
+
+            input.addEventListener("change", function () {
+                clearFormError();
+                showFile(input.files[0]);
+            });
+
+            clearFileBtn.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                input.value = "";
+                showFile(null);
+                announce("Selected file removed.");
+            });
+
+            startOverBtn.addEventListener("click", resetToForm);
+            retryBtn.addEventListener("click", function () {
+                result.hidden = true;
+                clearFormError();
+                input.value = "";
+                showFile(null);
+                uploadBtn.focus({ preventScroll: true });
+            });
+
+            /* Drag and drop */
+            ["dragenter", "dragover"].forEach(function (type) {
+                dropzone.addEventListener(type, function (event) {
+                    event.preventDefault();
+                    dropzone.classList.add("is-dragging");
+                });
+            });
+
+            ["dragleave", "dragend"].forEach(function (type) {
+                dropzone.addEventListener(type, function (event) {
+                    if (event.target === dropzone || !dropzone.contains(event.relatedTarget)) {
+                        dropzone.classList.remove("is-dragging");
+                    }
+                });
+            });
+
+            dropzone.addEventListener("drop", function (event) {
+                event.preventDefault();
+                dropzone.classList.remove("is-dragging");
+                var files = event.dataTransfer && event.dataTransfer.files;
+                if (!files || !files.length) return;
+                input.files = files;
+                showFile(files[0]);
+            });
+
+            window.addEventListener("beforeunload", stopTimer);
+        })();
+    </script>
+</body>
+</html>
